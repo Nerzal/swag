@@ -129,7 +129,7 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 					parser.swagger.Info.Version = strings.TrimSpace(commentLine[len(attribute):])
 				case "@title":
 					parser.swagger.Info.Title = strings.TrimSpace(commentLine[len(attribute):])
-				case "@description":					
+				case "@description":
 					if parser.swagger.Info.Description == "{{.Description}}" {
 						parser.swagger.Info.Description = strings.TrimSpace(commentLine[len(attribute):])
 					} else {

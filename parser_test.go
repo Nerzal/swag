@@ -2349,3 +2349,16 @@ func TestApiParseTag(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestParser_ParseMultilineDescription(t *testing.T) {
+    searchDir := "testdata/multiline_descirption"
+	mainAPIFile := "main.go"
+	p := New()
+	p.PropNamingStrategy = PascalCase
+	p.ParseAPI(searchDir, mainAPIFile)
+    info := p.swagger.SwaggerProps.Info
+    if info.Description != "This is a sample server Petstore server.<br>And we do now support multiline descriptions."{
+        t.Fail()
+    }
+    t.Log(info.Description)
+}
