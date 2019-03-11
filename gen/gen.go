@@ -128,6 +128,10 @@ func (s *s) ReadDoc() string {
 	return tpl.String()
 }
 
+func (s *s) GetSpecJSON() string {
+	return doc
+}
+
 func init() {
 	swag.Register(swag.Name, &s{})
 }

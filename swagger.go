@@ -16,6 +16,7 @@ var (
 // Swagger is a interface to read swagger document.
 type Swagger interface {
 	ReadDoc() string
+	GetSpecJSON() string
 }
 
 // Register registers swagger for given name.
@@ -36,6 +37,14 @@ func Register(name string, swagger Swagger) {
 func ReadDoc() (string, error) {
 	if swag != nil {
 		return swag.ReadDoc(), nil
+	}
+	return "", errors.New("not yet registered swag")
+}
+
+//GetSpecJSON returns the swagger.json
+func GetSpecJSON() (string, error) {
+	if swag != nil {
+		return swag.GetSpecJSON(), nil
 	}
 	return "", errors.New("not yet registered swag")
 }
