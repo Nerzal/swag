@@ -102,7 +102,9 @@ func (parser *Parser) ParseAPI(searchDir string, mainAPIFile string) error {
 		}
 	}
 
-	parser.ParseDefinitions()
+	if err := parser.ParseDefinitions(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -464,7 +466,7 @@ func (parser *Parser) isInStructStack(refTypeName string) bool {
 }
 
 // ParseDefinitions parses Swagger Api definitions.
-func (parser *Parser) ParseDefinitions() {
+func (parser *Parser) ParseDefinitions() error {
 	// sort the typeNames so that parsing definitions is deterministic
 	typeNames := make([]string, 0, len(parser.registerTypes))
 	for refTypeName := range parser.registerTypes {
@@ -477,8 +479,13 @@ func (parser *Parser) ParseDefinitions() {
 		ss := strings.Split(refTypeName, ".")
 		pkgName := ss[0]
 		parser.structStack = nil
-		parser.ParseDefinition(pkgName, typeSpec.Name.Name, typeSpec)
+		err := parser.ParseDefinition(pkgName, typeSpec.Name.Name, typeSpec)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 // ParseDefinition parses given type spec that corresponds to the type under
@@ -507,7 +514,7 @@ func (parser *Parser) ParseDefinition(pkgName, typeName string, typeSpec *ast.Ty
 	return nil
 }
 
-func (parser *Parser) collectRequiredFields(pkgName string, properties map[string]spec.Schema, extraRequired []string) (requiredFields []string) {
+func (parser *Parser) collectRequiredFields(pkgName string, properties map[string]spec.Schema, extraRequired []string) (requiredFields []string, err error) {
 	// created sorted list of properties keys so when we iterate over them it's deterministic
 	ks := make([]string, 0, len(properties))
 	for k := range properties {
@@ -525,7 +532,10 @@ func (parser *Parser) collectRequiredFields(pkgName string, properties map[strin
 		tname := prop.SchemaProps.Type[0]
 		if _, ok := parser.TypeDefinitions[pkgName][tname]; ok {
 			tspec := parser.TypeDefinitions[pkgName][tname]
-			parser.ParseDefinition(pkgName, tname, tspec)
+			err := parser.ParseDefinition(pkgName, tname, tspec)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if tname != "object" {
 			requiredFields = append(requiredFields, prop.SchemaProps.Required...)
@@ -539,7 +549,7 @@ func (parser *Parser) collectRequiredFields(pkgName string, properties map[strin
 
 	sort.Strings(requiredFields)
 
-	return
+	return requiredFields, nil
 }
 
 func fullTypeName(pkgName, typeName string) string {
@@ -588,7 +598,10 @@ func (parser *Parser) parseTypeExpr(pkgName, typeName string, typeExpr ast.Expr)
 		}
 
 		// collect requireds from our properties and anonymous fields
-		required := parser.collectRequiredFields(pkgName, properties, extraRequired)
+		required, err := parser.collectRequiredFields(pkgName, properties, extraRequired)
+		if err != nil {
+			return spec.Schema{}, err
+		}
 
 		// unset required from properties because we've collected them
 		for k, prop := range properties {
@@ -611,7 +624,10 @@ func (parser *Parser) parseTypeExpr(pkgName, typeName string, typeExpr ast.Expr)
 		refTypeName := fullTypeName(pkgName, expr.Name)
 		if _, isParsed := parser.swagger.Definitions[refTypeName]; !isParsed {
 			if typedef, ok := parser.TypeDefinitions[pkgName][expr.Name]; ok {
-				parser.ParseDefinition(pkgName, expr.Name, typedef)
+				err := parser.ParseDefinition(pkgName, expr.Name, typedef)
+				if err != nil {
+					return spec.Schema{}, err
+				}
 			}
 		}
 		return parser.swagger.Definitions[refTypeName], nil
@@ -643,7 +659,10 @@ func (parser *Parser) parseTypeExpr(pkgName, typeName string, typeExpr ast.Expr)
 			refTypeName := fullTypeName(pkgName, typeName)
 			if _, isParsed := parser.swagger.Definitions[refTypeName]; !isParsed {
 				typedef := parser.TypeDefinitions[pkgName][typeName]
-				parser.ParseDefinition(pkgName, typeName, typedef)
+				err := parser.ParseDefinition(pkgName, typeName, typedef)
+				if err != nil {
+					return spec.Schema{}, err
+				}
 			}
 			return parser.swagger.Definitions[refTypeName], nil
 		}
@@ -714,8 +733,11 @@ func (parser *Parser) parseStruct(pkgName string, field *ast.Field) (map[string]
 	}
 	if _, ok := parser.TypeDefinitions[pkgName][structField.schemaType]; ok { // user type field
 		// write definition if not yet present
-		parser.ParseDefinition(pkgName, structField.schemaType,
+		err = parser.ParseDefinition(pkgName, structField.schemaType,
 			parser.TypeDefinitions[pkgName][structField.schemaType])
+		if err != nil {
+			return nil, err
+		}
 		properties[structField.name] = spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Type:        []string{"object"}, // to avoid swagger validation error
@@ -728,8 +750,11 @@ func (parser *Parser) parseStruct(pkgName string, field *ast.Field) (map[string]
 	} else if structField.schemaType == "array" { // array field type
 		// if defined -- ref it
 		if _, ok := parser.TypeDefinitions[pkgName][structField.arrayType]; ok { // user type in array
-			parser.ParseDefinition(pkgName, structField.arrayType,
+			err = parser.ParseDefinition(pkgName, structField.arrayType,
 				parser.TypeDefinitions[pkgName][structField.arrayType])
+			if err != nil {
+				return nil, err
+			}
 			properties[structField.name] = spec.Schema{
 				SchemaProps: spec.SchemaProps{
 					Type:        []string{structField.schemaType},

@@ -58,6 +58,7 @@ func parseFieldSelectorExpr(astTypeSelectorExpr *ast.SelectorExpr, parser *Parse
 				}
 			}
 			parser.ParseDefinition(pkgName.Name, astTypeSelectorExpr.Sel.Name, typeDefinitions)
+
 			return propertyNewFunc(astTypeSelectorExpr.Sel.Name, pkgName.Name)
 		}
 		if actualPrimitiveType, isCustomType := parser.CustomPrimitiveTypes[astTypeSelectorExpr.Sel.Name]; isCustomType {

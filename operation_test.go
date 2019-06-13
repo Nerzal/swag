@@ -746,3 +746,34 @@ func TestParseDeprecationDescription(t *testing.T) {
 		t.Error("Failed to parse @deprecated comment")
 	}
 }
+
+func TestParseExternalObject(t *testing.T) {
+	comment := `@Success 200 {object} spec.CommonValidations "foo"`
+	operation := NewOperation()
+	operation.parser = New()
+
+	operation.parser.TypeDefinitions["model"] = make(map[string]*ast.TypeSpec)
+	operation.parser.TypeDefinitions["model"]["OrderRow"] = &ast.TypeSpec{}
+
+	err := operation.ParseComment(comment, nil)
+	assert.NoError(t, err)
+
+	response := operation.Responses.StatusCodeResponses[200]
+	assert.Equal(t, `foo`, response.Description)
+	assert.Equal(t, spec.StringOrArray{"object"}, response.Schema.Type)
+
+	b, _ := json.MarshalIndent(operation, "", "    ")
+
+	expected := `{
+    "responses": {
+        "200": {
+            "description": "foo",
+            "schema": {
+                "type": "object",
+                "$ref": "#/definitions/spec.CommonValidations"
+            }
+        }
+    }
+}`
+	assert.Equal(t, expected, string(b))
+}
