@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-openapi/spec"
+	"github.com/getkin/kin-openapi/openapi3"
 	"golang.org/x/tools/go/loader"
 )
 
@@ -23,7 +23,7 @@ import (
 type Operation struct {
 	HTTPMethod string
 	Path       string
-	spec.Operation
+	openapi3.Operation
 
 	parser              *Parser
 	codeExampleFilesDir string
@@ -56,11 +56,8 @@ func NewOperation(parser *Parser, options ...func(*Operation)) *Operation {
 	result := &Operation{
 		parser:     parser,
 		HTTPMethod: "get",
-		Operation: spec.Operation{
-			OperationProps: spec.OperationProps{},
-			VendorExtensible: spec.VendorExtensible{
-				Extensions: spec.Extensions{},
-			},
+		Operation: openapi3.Operation{
+			ExtensionProps: openapi3.ExtensionProps{},
 		},
 	}
 
@@ -101,7 +98,7 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 	case "@summary":
 		operation.Summary = lineRemainder
 	case "@id":
-		operation.ID = lineRemainder
+		operation.OperationID = lineRemainder
 	case "@tags":
 		operation.ParseTagsComment(lineRemainder)
 	case "@accept":
@@ -119,7 +116,7 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 	case "@security":
 		err = operation.ParseSecurityComment(lineRemainder)
 	case "@deprecated":
-		operation.Deprecate()
+		operation.Deprecated = true
 	case "@x-codesamples":
 		err = operation.ParseCodeSample(attribute, commentLine, lineRemainder)
 	default:
@@ -225,8 +222,8 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 			if operation.parser != nil {
 				param.CollectionFormat = TransToValidCollectionFormat(operation.parser.collectionFormatInQuery)
 			}
-			param.SimpleSchema.Items = &spec.Items{
-				SimpleSchema: spec.SimpleSchema{
+			param.SimpleSchema.Items = &openapi3.Items{
+				SimpleSchema: openapi3.SimpleSchema{
 					Type: refType,
 				},
 			}
@@ -262,8 +259,8 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 					if operation.parser != nil && operation.parser.collectionFormatInQuery != "" && param.CollectionFormat == "" {
 						param.CollectionFormat = TransToValidCollectionFormat(operation.parser.collectionFormatInQuery)
 					}
-					param.SimpleSchema.Items = &spec.Items{
-						SimpleSchema: spec.SimpleSchema{
+					param.SimpleSchema.Items = &openapi3.Items{
+						SimpleSchema: openapi3.SimpleSchema{
 							Type: prop.Items.Schema.Type[0],
 						},
 					}
@@ -330,7 +327,7 @@ var regexAttributes = map[string]*regexp.Regexp{
 	"collectionFormat": regexp.MustCompile(`(?i)\s+collectionFormat\(.*\)`),
 }
 
-func (operation *Operation) parseAndExtractionParamAttribute(commentLine, objectType, schemaType string, param *spec.Parameter) error {
+func (operation *Operation) parseAndExtractionParamAttribute(commentLine, objectType, schemaType string, param *openapi3.Parameter) error {
 	schemaType = TransToValidSchemeType(schemaType)
 	for attrKey, re := range regexAttributes {
 		attr, err := findAttr(re, commentLine)
@@ -418,7 +415,7 @@ func setNumberParam(name, schemaType, attr, commentLine string) (float64, error)
 	return n, nil
 }
 
-func setEnumParam(attr, schemaType string, param *spec.Parameter) error {
+func setEnumParam(attr, schemaType string, param *openapi3.Parameter) error {
 	for _, e := range strings.Split(attr, ",") {
 		e = strings.TrimSpace(e)
 
@@ -591,8 +588,8 @@ func findTypeDef(importPath, typeName string) (*ast.TypeSpec, error) {
 		for _, astDeclaration := range pkgInfo.Files[i].Decls {
 			if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
 				for _, astSpec := range generalDeclaration.Specs {
-					if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
-						if typeSpec.Name.String() == typeName {
+					if typeSpec, ok := astopenapi3.(*ast.TypeSpec); ok {
+						if typeopenapi3.Name.String() == typeName {
 							return typeSpec, nil
 						}
 					}
@@ -608,7 +605,7 @@ var responsePattern = regexp.MustCompile(`^([\w,]+)[\s]+([\w\{\}]+)[\s]+([\w\-\.
 //ResponseType{data1=Type1,data2=Type2}
 var combinedPattern = regexp.MustCompile(`^([\w\-\.\/\[\]]+)\{(.*)\}$`)
 
-func (operation *Operation) parseObjectSchema(refType string, astFile *ast.File) (*spec.Schema, error) {
+func (operation *Operation) parseObjectSchema(refType string, astFile *ast.File) (*openapi3.Schema, error) {
 	switch {
 	case refType == "interface{}":
 		return PrimitiveSchema(OBJECT), nil
@@ -622,7 +619,7 @@ func (operation *Operation) parseObjectSchema(refType string, astFile *ast.File)
 		if err != nil {
 			return nil, err
 		}
-		return spec.ArrayProperty(schema), nil
+		return openapi3.ArrayProperty(schema), nil
 	case strings.HasPrefix(refType, "map["):
 		//ignore key type
 		idx := strings.Index(refType, "]")
@@ -631,14 +628,14 @@ func (operation *Operation) parseObjectSchema(refType string, astFile *ast.File)
 		}
 		refType = refType[idx+1:]
 		if refType == "interface{}" {
-			return spec.MapProperty(nil), nil
+			return openapi3.MapProperty(nil), nil
 
 		}
 		schema, err := operation.parseObjectSchema(refType, astFile)
 		if err != nil {
 			return nil, err
 		}
-		return spec.MapProperty(schema), nil
+		return openapi3.MapProperty(schema), nil
 	case strings.Contains(refType, "{"):
 		return operation.parseCombinedObjectSchema(refType, astFile)
 	default:
@@ -654,7 +651,7 @@ func (operation *Operation) parseObjectSchema(refType string, astFile *ast.File)
 	}
 }
 
-func (operation *Operation) parseCombinedObjectSchema(refType string, astFile *ast.File) (*spec.Schema, error) {
+func (operation *Operation) parseCombinedObjectSchema(refType string, astFile *ast.File) (*openapi3.Schema, error) {
 	matches := combinedPattern.FindStringSubmatch(refType)
 	if len(matches) != 3 {
 		return nil, fmt.Errorf("invalid type: %s", refType)
@@ -680,7 +677,7 @@ func (operation *Operation) parseCombinedObjectSchema(refType string, astFile *a
 	}
 
 	fields := parseFields(matches[2])
-	props := map[string]spec.Schema{}
+	props := map[string]openapi3.Schema{}
 	for _, field := range fields {
 		if matches := strings.SplitN(field, "=", 2); len(matches) == 2 {
 			schema, err := operation.parseObjectSchema(matches[1], astFile)
@@ -694,15 +691,15 @@ func (operation *Operation) parseCombinedObjectSchema(refType string, astFile *a
 	if len(props) == 0 {
 		return schema, nil
 	}
-	return spec.ComposedSchema(*schema, spec.Schema{
-		SchemaProps: spec.SchemaProps{
+	return openapi3.ComposedSchema(*schema, openapi3.Schema{
+		SchemaProps: openapi3.SchemaProps{
 			Type:       []string{OBJECT},
 			Properties: props,
 		},
 	}), nil
 }
 
-func (operation *Operation) parseAPIObjectSchema(schemaType, refType string, astFile *ast.File) (*spec.Schema, error) {
+func (operation *Operation) parseAPIObjectSchema(schemaType, refType string, astFile *ast.File) (*openapi3.Schema, error) {
 	switch schemaType {
 	case OBJECT:
 		if !strings.HasPrefix(refType, "[]") {
@@ -715,7 +712,7 @@ func (operation *Operation) parseAPIObjectSchema(schemaType, refType string, ast
 		if err != nil {
 			return nil, err
 		}
-		return spec.ArrayProperty(schema), nil
+		return openapi3.ArrayProperty(schema), nil
 	case PRIMITIVE:
 		return PrimitiveSchema(refType), nil
 	default:
@@ -748,8 +745,8 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 			operation.DefaultResponse().Schema = schema
 			operation.DefaultResponse().Description = responseDescription
 		} else if code, err := strconv.Atoi(codeStr); err == nil {
-			resp := &spec.Response{
-				ResponseProps: spec.ResponseProps{Schema: schema, Description: responseDescription},
+			resp := &openapi3.Response{
+				ResponseProps: openapi3.ResponseProps{Schema: schema, Description: responseDescription},
 			}
 			if resp.Description == "" {
 				resp.Description = http.StatusText(code)
@@ -774,21 +771,21 @@ func (operation *Operation) ParseResponseHeaderComment(commentLine string, astFi
 	schemaType := strings.Trim(matches[2], "{}")
 	headerKey := matches[3]
 	description := strings.Trim(matches[4], "\"")
-	header := spec.Header{}
+	header := openapi3.Header{}
 	header.Description = description
 	header.Type = schemaType
 
 	if strings.EqualFold(matches[1], "all") {
 		if operation.Responses.Default != nil {
 			if operation.Responses.Default.Headers == nil {
-				operation.Responses.Default.Headers = make(map[string]spec.Header)
+				operation.Responses.Default.Headers = make(map[string]openapi3.Header)
 			}
 			operation.Responses.Default.Headers[headerKey] = header
 		}
 		if operation.Responses != nil && operation.Responses.StatusCodeResponses != nil {
 			for code, response := range operation.Responses.StatusCodeResponses {
 				if response.Headers == nil {
-					response.Headers = make(map[string]spec.Header)
+					response.Headers = make(map[string]openapi3.Header)
 				}
 				response.Headers[headerKey] = header
 				operation.Responses.StatusCodeResponses[code] = response
@@ -801,7 +798,7 @@ func (operation *Operation) ParseResponseHeaderComment(commentLine string, astFi
 		if strings.EqualFold(codeStr, "default") {
 			if operation.Responses.Default != nil {
 				if operation.Responses.Default.Headers == nil {
-					operation.Responses.Default.Headers = make(map[string]spec.Header)
+					operation.Responses.Default.Headers = make(map[string]openapi3.Header)
 				}
 				operation.Responses.Default.Headers[headerKey] = header
 			}
@@ -809,7 +806,7 @@ func (operation *Operation) ParseResponseHeaderComment(commentLine string, astFi
 			if operation.Responses != nil && operation.Responses.StatusCodeResponses != nil {
 				if response, responseExist := operation.Responses.StatusCodeResponses[code]; responseExist {
 					if response.Headers == nil {
-						response.Headers = make(map[string]spec.Header)
+						response.Headers = make(map[string]openapi3.Header)
 					}
 					response.Headers[headerKey] = header
 
@@ -839,7 +836,7 @@ func (operation *Operation) ParseEmptyResponseComment(commentLine string) error 
 		if strings.EqualFold(codeStr, "default") {
 			operation.DefaultResponse().Description = responseDescription
 		} else if code, err := strconv.Atoi(codeStr); err == nil {
-			var response spec.Response
+			var response openapi3.Response
 			response.Description = responseDescription
 			operation.AddResponse(code, &response)
 		} else {
@@ -856,7 +853,7 @@ func (operation *Operation) ParseEmptyResponseOnly(commentLine string) error {
 		if strings.EqualFold(codeStr, "default") {
 			_ = operation.DefaultResponse()
 		} else if code, err := strconv.Atoi(codeStr); err == nil {
-			var response spec.Response
+			var response openapi3.Response
 			//response.Description = http.StatusText(code)
 			operation.AddResponse(code, &response)
 		} else {
@@ -868,48 +865,48 @@ func (operation *Operation) ParseEmptyResponseOnly(commentLine string) error {
 }
 
 //DefaultResponse return the default response member pointer
-func (operation *Operation) DefaultResponse() *spec.Response {
+func (operation *Operation) DefaultResponse() *openapi3.Response {
 	if operation.Responses.Default == nil {
-		operation.Responses.Default = &spec.Response{}
+		operation.Responses.Default = &openapi3.Response{}
 	}
 	return operation.Responses.Default
 }
 
 //AddResponse add a response for a code
-func (operation *Operation) AddResponse(code int, response *spec.Response) {
+func (operation *Operation) AddResponse(code int, response *openapi3.Response) {
 	if operation.Responses == nil {
-		operation.Responses = &spec.Responses{
-			ResponsesProps: spec.ResponsesProps{
-				StatusCodeResponses: make(map[int]spec.Response),
+		operation.Responses = &openapi3.Responses{
+			ResponsesProps: openapi3.ResponsesProps{
+				StatusCodeResponses: make(map[int]openapi3.Response),
 			},
 		}
 	}
 	operation.Responses.StatusCodeResponses[code] = *response
 }
 
-// createParameter returns swagger spec.Parameter for gived  paramType, description, paramName, schemaType, required
-func createParameter(paramType, description, paramName, schemaType string, required bool) spec.Parameter {
+// createParameter returns swagger openapi3.Parameter for gived  paramType, description, paramName, schemaType, required
+func createParameter(paramType, description, paramName, schemaType string, required bool) openapi3.Parameter {
 	// //five possible parameter types. 	query, path, body, header, form
-	paramProps := spec.ParamProps{
+	paramProps := openapi3.ParamProps{
 		Name:        paramName,
 		Description: description,
 		Required:    required,
 		In:          paramType,
 	}
 	if paramType == "body" {
-		paramProps.Schema = &spec.Schema{
-			SchemaProps: spec.SchemaProps{
+		paramProps.Schema = &openapi3.Schema{
+			SchemaProps: openapi3.SchemaProps{
 				Type: []string{schemaType},
 			},
 		}
-		parameter := spec.Parameter{
+		parameter := openapi3.Parameter{
 			ParamProps: paramProps,
 		}
 		return parameter
 	}
-	parameter := spec.Parameter{
+	parameter := openapi3.Parameter{
 		ParamProps: paramProps,
-		SimpleSchema: spec.SimpleSchema{
+		SimpleSchema: openapi3.SimpleSchema{
 			Type: schemaType,
 		},
 	}

@@ -21,7 +21,7 @@ import (
 	"unicode"
 
 	"github.com/KyleBanks/depth"
-	"github.com/go-openapi/spec"
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 const (
@@ -49,7 +49,7 @@ var (
 // Parser implements a parser for Go source files.
 type Parser struct {
 	// swagger represents the root document object for the API specification
-	swagger *spec.Swagger
+	swagger *openapi3.Swagger
 
 	//packages store entities of APIs, definitions, file, package path etc.  and their relations
 	packages *PackagesDefinitions
@@ -98,22 +98,13 @@ type Parser struct {
 // New creates a new Parser with default properties.
 func New(options ...func(*Parser)) *Parser {
 	parser := &Parser{
-		swagger: &spec.Swagger{
-			SwaggerProps: spec.SwaggerProps{
-				Info: &spec.Info{
-					InfoProps: spec.InfoProps{
-						Contact: &spec.ContactInfo{},
-						License: nil,
-					},
-					VendorExtensible: spec.VendorExtensible{
-						Extensions: spec.Extensions{},
-					},
-				},
-				Paths: &spec.Paths{
-					Paths: make(map[string]spec.PathItem),
-				},
-				Definitions: make(map[string]spec.Schema),
+		swagger: &openapi3.Swagger{
+			Info: &openapi3.Info{
+				Contact:        &openapi3.Contact{},
+				License:        nil,
+				ExtensionProps: openapi3.ExtensionProps{},
 			},
+			Paths: openapi3.Paths{},
 		},
 		packages:           NewPackagesDefinitions(),
 		parsedSchemas:      make(map[*TypeSpecDef]*Schema),
@@ -236,9 +227,9 @@ func getPkgName(searchDir string) (string, error) {
 	return outStr, nil
 }
 
-func initIfEmpty(license *spec.License) *spec.License {
+func initIfEmpty(license *openapi3.License) *openapi3.License {
 	if license == nil {
-		return new(spec.License)
+		return new(openapi3.License)
 	}
 
 	return license
@@ -252,8 +243,8 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 		return fmt.Errorf("cannot parse source files %s: %s", mainAPIFile, err)
 	}
 
-	parser.swagger.Swagger = "2.0"
-	securityMap := map[string]*spec.SecurityScheme{}
+	parser.swagger.Info.Version = "3.0"
+	securityMap := map[string]*openapi3.SecurityScheme{}
 
 	for _, comment := range fileTree.Comments {
 		if !isGeneralAPIComment(comment) {
@@ -301,50 +292,52 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 				parser.swagger.Info.License = initIfEmpty(parser.swagger.Info.License)
 				parser.swagger.Info.License.URL = value
 			case "@host":
-				parser.swagger.Host = value
+				panic("not yet implemented")
+				// parser.swagger.Host = value
 			case "@basepath":
-				parser.swagger.BasePath = value
+				panic("not yet implemented")
+				// parser.swagger.BasePath = value
 			case "@schemes":
-				parser.swagger.Schemes = getSchemes(commentLine)
+				panic("not yet implemented")
+				// parser.swagger.Schemes = getSchemes(commentLine)
 			case "@tag.name":
-				parser.swagger.Tags = append(parser.swagger.Tags, spec.Tag{
-					TagProps: spec.TagProps{
-						Name: value,
-					},
+				parser.swagger.Tags = append(parser.swagger.Tags, &openapi3.Tag{
+					Name: value,
 				})
 			case "@tag.description":
 				tag := parser.swagger.Tags[len(parser.swagger.Tags)-1]
-				tag.TagProps.Description = value
+				tag.Description = value
 				replaceLastTag(parser.swagger.Tags, tag)
 			case "@tag.description.markdown":
 				tag := parser.swagger.Tags[len(parser.swagger.Tags)-1]
-				commentInfo, err := getMarkdownForTag(tag.TagProps.Name, parser.markdownFileDir)
+				commentInfo, err := getMarkdownForTag(tag.Name, parser.markdownFileDir)
 				if err != nil {
 					return err
 				}
-				tag.TagProps.Description = string(commentInfo)
+				tag.Description = string(commentInfo)
 				replaceLastTag(parser.swagger.Tags, tag)
 			case "@tag.docs.url":
 				tag := parser.swagger.Tags[len(parser.swagger.Tags)-1]
-				tag.TagProps.ExternalDocs = &spec.ExternalDocumentation{
+				tag.ExternalDocs = &openapi3.ExternalDocs{
 					URL: value,
 				}
 				replaceLastTag(parser.swagger.Tags, tag)
 			case "@tag.docs.description":
 				tag := parser.swagger.Tags[len(parser.swagger.Tags)-1]
-				if tag.TagProps.ExternalDocs == nil {
+				if tag.ExternalDocs == nil {
 					return fmt.Errorf("%s needs to come after a @tags.docs.url", attribute)
 				}
-				tag.TagProps.ExternalDocs.Description = value
+				tag.ExternalDocs.Description = value
 				replaceLastTag(parser.swagger.Tags, tag)
 			case "@securitydefinitions.basic":
-				securityMap[value] = spec.BasicAuth()
+				securityMap[value] = &openapi3.SecurityScheme{}
 			case "@securitydefinitions.apikey":
-				attrMap, _, _, err := extractSecurityAttribute(attribute, []string{"@in", "@name"}, comments[i+1:])
-				if err != nil {
-					return err
-				}
-				securityMap[value] = spec.APIKeyAuth(attrMap["@name"], attrMap["@in"])
+				// attrMap, _, _, err := extractSecurityAttribute(attribute, []string{"@in", "@name"}, comments[i+1:])
+				// if err != nil {
+				// 	return err
+				// }
+				// securityMap[value] = openapi3.APIKeyAuth(attrMap["@name"], attrMap["@in"])
+				panic("not yet implemented")
 			case "@securitydefinitions.oauth2.application":
 				attrMap, scopes, extensions, err := extractSecurityAttribute(attribute, []string{"@tokenurl"}, comments[i+1:])
 				if err != nil {
@@ -400,11 +393,8 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 							return fmt.Errorf("annotation %s need a valid json value", attribute)
 						}
 
-						if strings.Contains(extensionName, "logo") {
-							parser.swagger.Info.Extensions.Add(extensionName, valueJSON)
-						} else {
-							parser.swagger.AddExtension(extensionName, valueJSON)
-						}
+						parser.swagger.Info.Extensions[extensionName] = valueJSON
+
 					}
 				}
 			}
@@ -413,7 +403,7 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 	}
 
 	if len(securityMap) > 0 {
-		parser.swagger.SecurityDefinitions = securityMap
+		parser.swagger.Components.SecuritySchemes = openapi3.SecuritySchemes{}
 	}
 
 	return nil
@@ -468,52 +458,58 @@ func extractSecurityAttribute(context string, search []string, lines []string) (
 	return attrMap, scopes, extensions, nil
 }
 
-func securitySchemeOAuth2Application(tokenurl string, scopes map[string]string, extensions map[string]interface{}) *spec.SecurityScheme {
-	securityScheme := spec.OAuth2Application(tokenurl)
-	securityScheme.VendorExtensible.Extensions = handleSecuritySchemaExtensions(extensions)
-	for scope, description := range scopes {
-		securityScheme.AddScope(scope, description)
-	}
-	return securityScheme
+func securitySchemeOAuth2Application(tokenurl string, scopes map[string]string, extensions map[string]interface{}) *openapi3.SecurityScheme {
+	panic("not yet implemented")
+
+	// securityScheme := openapi3.OAuth2Application(tokenurl)
+
+	// securityScheme.VendorExtensible.Extensions = handleSecuritySchemaExtensions(extensions)
+	// for scope, description := range scopes {
+	// 	securityScheme.AddScope(scope, description)
+	// }
+	// return securityScheme
 }
 
-func securitySchemeOAuth2Implicit(authorizationurl string, scopes map[string]string, extensions map[string]interface{}) *spec.SecurityScheme {
-	securityScheme := spec.OAuth2Implicit(authorizationurl)
-	securityScheme.VendorExtensible.Extensions = handleSecuritySchemaExtensions(extensions)
-	for scope, description := range scopes {
-		securityScheme.AddScope(scope, description)
-	}
-	return securityScheme
+func securitySchemeOAuth2Implicit(authorizationurl string, scopes map[string]string, extensions map[string]interface{}) *openapi3.SecurityScheme {
+	panic("not yet implemented")
+	// securityScheme := openapi3.OAuth2Implicit(authorizationurl)
+	// securityScheme.VendorExtensible.Extensions = handleSecuritySchemaExtensions(extensions)
+	// for scope, description := range scopes {
+	// 	securityScheme.AddScope(scope, description)
+	// }
+	// return securityScheme
 }
 
-func securitySchemeOAuth2Password(tokenurl string, scopes map[string]string, extensions map[string]interface{}) *spec.SecurityScheme {
-	securityScheme := spec.OAuth2Password(tokenurl)
-	securityScheme.VendorExtensible.Extensions = handleSecuritySchemaExtensions(extensions)
-	for scope, description := range scopes {
-		securityScheme.AddScope(scope, description)
-	}
-	return securityScheme
+func securitySchemeOAuth2Password(tokenurl string, scopes map[string]string, extensions map[string]interface{}) *openapi3.SecurityScheme {
+	panic("not yet implemented")
+	// securityScheme := openapi3.OAuth2Password(tokenurl)
+	// securityScheme.VendorExtensible.Extensions = handleSecuritySchemaExtensions(extensions)
+	// for scope, description := range scopes {
+	// 	securityScheme.AddScope(scope, description)
+	// }
+	// return securityScheme
 }
 
-func securitySchemeOAuth2AccessToken(authorizationurl, tokenurl string, scopes map[string]string, extensions map[string]interface{}) *spec.SecurityScheme {
-	securityScheme := spec.OAuth2AccessToken(authorizationurl, tokenurl)
-	securityScheme.VendorExtensible.Extensions = handleSecuritySchemaExtensions(extensions)
-	for scope, description := range scopes {
-		securityScheme.AddScope(scope, description)
-	}
-	return securityScheme
+func securitySchemeOAuth2AccessToken(authorizationurl, tokenurl string, scopes map[string]string, extensions map[string]interface{}) *openapi3.SecurityScheme {
+	panic("not yet implemented")
+	// securityScheme := openapi3.OAuth2AccessToken(authorizationurl, tokenurl)
+	// securityScheme.VendorExtensible.Extensions = handleSecuritySchemaExtensions(extensions)
+	// for scope, description := range scopes {
+	// 	securityScheme.AddScope(scope, description)
+	// }
+	// return securityScheme
 }
 
-func handleSecuritySchemaExtensions(providedExtensions map[string]interface{}) spec.Extensions {
-	var extensions spec.Extensions
-	if len(providedExtensions) > 0 {
-		extensions = make(map[string]interface{}, len(providedExtensions))
-		for key, value := range providedExtensions {
-			extensions[key] = value
-		}
-	}
-	return extensions
-}
+// func handleSecuritySchemaExtensions(providedExtensions map[string]interface{}) openapi3.Extensions {
+// 	var extensions openapi3.Extensions
+// 	if len(providedExtensions) > 0 {
+// 		extensions = make(map[string]interface{}, len(providedExtensions))
+// 		for key, value := range providedExtensions {
+// 			extensions[key] = value
+// 		}
+// 	}
+// 	return extensions
+// }
 
 func getMarkdownForTag(tagName string, dirPath string) ([]byte, error) {
 	filesInfos, err := ioutil.ReadDir(dirPath)
@@ -581,11 +577,11 @@ func (parser *Parser) ParseRouterAPIInfo(fileName string, astFile *ast.File) err
 						return fmt.Errorf("ParseComment error in file %s :%+v", fileName, err)
 					}
 				}
-				var pathItem spec.PathItem
+				var pathItem *openapi3.PathItem
 				var ok bool
 
-				if pathItem, ok = parser.swagger.Paths.Paths[operation.Path]; !ok {
-					pathItem = spec.PathItem{}
+				if pathItem, ok = parser.swagger.Paths[operation.Path]; !ok {
+					pathItem = &openapi3.PathItem{}
 				}
 				switch strings.ToUpper(operation.HTTPMethod) {
 				case http.MethodGet:
@@ -604,7 +600,7 @@ func (parser *Parser) ParseRouterAPIInfo(fileName string, astFile *ast.File) err
 					pathItem.Options = &operation.Operation
 				}
 
-				parser.swagger.Paths.Paths[operation.Path] = pathItem
+				parser.swagger.Paths[operation.Path] = pathItem
 			}
 		}
 	}
@@ -626,7 +622,7 @@ func convertFromSpecificToPrimitive(typeName string) (string, error) {
 	return typeName, ErrFailedConvertPrimitiveType
 }
 
-func (parser *Parser) getTypeSchema(typeName string, file *ast.File, ref bool) (*spec.Schema, error) {
+func (parser *Parser) getTypeSchema(typeName string, file *ast.File, ref bool) (*openapi3.SchemaRef, error) {
 	if IsGolangPrimitiveType(typeName) {
 		return PrimitiveSchema(TransToValidSchemeType(typeName)), nil
 	}
@@ -654,10 +650,11 @@ func (parser *Parser) getTypeSchema(typeName string, file *ast.File, ref bool) (
 		}
 	}
 
-	if ref && len(schema.Schema.Type) > 0 && schema.Schema.Type[0] == OBJECT {
+	if ref && schema.SchemaRef.Value.Type != "" && schema.SchemaRef.Value.Type == OBJECT {
 		return parser.getRefTypeSchema(typeSpecDef, schema), nil
 	}
-	return schema.Schema, nil
+
+	return schema.SchemaRef, nil
 }
 
 func (parser *Parser) renameRefSchemas() {
@@ -665,24 +662,27 @@ func (parser *Parser) renameRefSchemas() {
 		return
 	}
 
-	//rename schemas in swagger.Definitions
-	for name, pkgPath := range parser.toBeRenamedSchemas {
-		if schema, ok := parser.swagger.Definitions[name]; ok {
-			delete(parser.swagger.Definitions, name)
-			name = parser.renameSchema(name, pkgPath)
-			parser.swagger.Definitions[name] = schema
-		}
-	}
+	panic("not yet implemented")
 
-	//rename URLs if match
-	for _, url := range parser.toBeRenamedRefURLs {
-		parts := strings.Split(url.Fragment, "/")
-		name := parts[len(parts)-1]
-		if pkgPath, ok := parser.toBeRenamedSchemas[name]; ok {
-			parts[len(parts)-1] = parser.renameSchema(name, pkgPath)
-			url.Fragment = strings.Join(parts, "/")
-		}
-	}
+	// //rename schemas in swagger.Definitions
+	// for name, pkgPath := range parser.toBeRenamedSchemas {
+	// 	parser.swagger.
+	// 	if schema, ok := parser.swagger.Definitions[name]; ok {
+	// 		delete(parser.swagger.Definitions, name)
+	// 		name = parser.renameSchema(name, pkgPath)
+	// 		parser.swagger.Definitions[name] = schema
+	// 	}
+	// }
+
+	// //rename URLs if match
+	// for _, url := range parser.toBeRenamedRefURLs {
+	// 	parts := strings.Split(url.Fragment, "/")
+	// 	name := parts[len(parts)-1]
+	// 	if pkgPath, ok := parser.toBeRenamedSchemas[name]; ok {
+	// 		parts[len(parts)-1] = parser.renameSchema(name, pkgPath)
+	// 		url.Fragment = strings.Join(parts, "/")
+	// 	}
+	// }
 }
 
 func (parser *Parser) renameSchema(name, pkgPath string) string {
@@ -692,7 +692,7 @@ func (parser *Parser) renameSchema(name, pkgPath string) string {
 	return name
 }
 
-func (parser *Parser) getRefTypeSchema(typeSpecDef *TypeSpecDef, schema *Schema) *spec.Schema {
+func (parser *Parser) getRefTypeSchema(typeSpecDef *TypeSpecDef, schema *Schema) *openapi3.SchemaRef {
 	if _, ok := parser.outputSchemas[typeSpecDef]; !ok {
 		if existSchema, ok := parser.existSchemaNames[schema.Name]; ok {
 			//store the first one to be renamed after parsing over
@@ -704,17 +704,19 @@ func (parser *Parser) getRefTypeSchema(typeSpecDef *TypeSpecDef, schema *Schema)
 		} else {
 			parser.existSchemaNames[schema.Name] = schema
 		}
-		if schema.Schema != nil {
-			parser.swagger.Definitions[schema.Name] = *schema.Schema
+
+		if schema != nil {
+			parser.swagger.Components.Schemas[schema.Name] = schema.SchemaRef
 		} else {
-			parser.swagger.Definitions[schema.Name] = spec.Schema{}
+			parser.swagger.Components.Schemas[schema.Name] = &openapi3.SchemaRef{}
 		}
+
 		parser.outputSchemas[typeSpecDef] = schema
 	}
 
 	refSchema := RefSchema(schema.Name)
 	//store every URL
-	parser.toBeRenamedRefURLs = append(parser.toBeRenamedRefURLs, refSchema.Ref.Ref.GetURL())
+	parser.toBeRenamedRefURLs = append(parser.toBeRenamedRefURLs, refSchema.Ref.GetURL())
 	return refSchema
 }
 
@@ -742,9 +744,9 @@ func (parser *Parser) ParseDefinition(typeSpecDef *TypeSpecDef) (*Schema, error)
 	if parser.isInStructStack(typeSpecDef) {
 		Println("Skipping '" + typeName + "', recursion detected.")
 		return &Schema{
-				Name:    refTypeName,
-				PkgPath: typeSpecDef.PkgPath,
-				Schema:  PrimitiveSchema(OBJECT)},
+				Name:      refTypeName,
+				PkgPath:   typeSpecDef.PkgPath,
+				SchemaRef: PrimitiveSchema(OBJECT)},
 			ErrRecursiveParseStruct
 	}
 	parser.structStack = append(parser.structStack, typeSpecDef)
@@ -755,12 +757,12 @@ func (parser *Parser) ParseDefinition(typeSpecDef *TypeSpecDef) (*Schema, error)
 	if err != nil {
 		return nil, err
 	}
-	s := &Schema{Name: refTypeName, PkgPath: typeSpecDef.PkgPath, Schema: schema}
+	s := &Schema{Name: refTypeName, PkgPath: typeSpecDef.PkgPath, SchemaRef: schema}
 	parser.parsedSchemas[typeSpecDef] = s
 
 	//update an empty schema as a result of recursion
 	if s2, ok := parser.outputSchemas[typeSpecDef]; ok {
-		parser.swagger.Definitions[s2.Name] = *schema
+		parser.swagger.Components.Schemas[s2.Name] = *schema
 	}
 
 	return s, nil
@@ -775,7 +777,7 @@ func fullTypeName(pkgName, typeName string) string {
 
 // parseTypeExpr parses given type expression that corresponds to the type under
 // given name and package, and returns swagger schema for it.
-func (parser *Parser) parseTypeExpr(file *ast.File, typeExpr ast.Expr, ref bool) (*spec.Schema, error) {
+func (parser *Parser) parseTypeExpr(file *ast.File, typeExpr ast.Expr, ref bool) (*openapi3.Schema, error) {
 	switch expr := typeExpr.(type) {
 	// type Foo struct {...}
 	case *ast.StructType:
@@ -800,17 +802,17 @@ func (parser *Parser) parseTypeExpr(file *ast.File, typeExpr ast.Expr, ref bool)
 		if err != nil {
 			return nil, err
 		}
-		return spec.ArrayProperty(itemSchema), nil
+		return openapi3.ArrayProperty(itemSchema), nil
 	// type Foo map[string]Bar
 	case *ast.MapType:
 		if _, ok := expr.Value.(*ast.InterfaceType); ok {
-			return spec.MapProperty(nil), nil
+			return openapi3.MapProperty(nil), nil
 		}
 		schema, err := parser.parseTypeExpr(file, expr.Value, true)
 		if err != nil {
 			return nil, err
 		}
-		return spec.MapProperty(schema), nil
+		return openapi3.MapProperty(schema), nil
 	case *ast.FuncType:
 		return nil, ErrFuncTypeField
 	// ...
@@ -821,10 +823,10 @@ func (parser *Parser) parseTypeExpr(file *ast.File, typeExpr ast.Expr, ref bool)
 	return PrimitiveSchema(OBJECT), nil
 }
 
-func (parser *Parser) parseStruct(file *ast.File, fields *ast.FieldList) (*spec.Schema, error) {
+func (parser *Parser) parseStruct(file *ast.File, fields *ast.FieldList) (*openapi3.Schema, error) {
 
 	required := make([]string, 0)
-	properties := make(map[string]spec.Schema)
+	properties := make(map[string]*openapi3.SchemaRef)
 	for _, field := range fields.List {
 		fieldProps, requiredFromAnon, err := parser.parseStructField(file, field)
 		if err == ErrFuncTypeField {
@@ -842,12 +844,11 @@ func (parser *Parser) parseStruct(file *ast.File, fields *ast.FieldList) (*spec.
 
 	sort.Strings(required)
 
-	return &spec.Schema{
-		SchemaProps: spec.SchemaProps{
-			Type:       []string{OBJECT},
-			Properties: properties,
-			Required:   required,
-		}}, nil
+	return &openapi3.Schema{
+		Properties: properties,
+		Type:       OBJECT,
+		Required:   required,
+	}, nil
 }
 
 type structField struct {
@@ -862,14 +863,14 @@ type structField struct {
 	exampleValue interface{}
 	maximum      *float64
 	minimum      *float64
-	maxLength    *int64
-	minLength    *int64
+	maxLength    *uint64
+	minLength    uint64
 	enums        []interface{}
 	defaultValue interface{}
 	extensions   map[string]interface{}
 }
 
-func (parser *Parser) parseStructField(file *ast.File, field *ast.Field) (map[string]spec.Schema, []string, error) {
+func (parser *Parser) parseStructField(file *ast.File, field *ast.Field) (map[string]*openapi3.SchemaRef, []string, error) {
 	if field.Names == nil {
 		if field.Tag != nil {
 			skip, ok := reflect.StructTag(strings.ReplaceAll(field.Tag.Value, "`", "")).Lookup("swaggerignore")
@@ -886,19 +887,21 @@ func (parser *Parser) parseStructField(file *ast.File, field *ast.Field) (map[st
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(schema.Type) > 0 && schema.Type[0] == OBJECT {
+		if schema.Type != "" && schema.Type == OBJECT {
 			if len(schema.Properties) == 0 {
 				return nil, nil, nil
 			}
 
-			properties := map[string]spec.Schema{}
+			properties := map[string]*openapi3.SchemaRef{}
 			for k, v := range schema.Properties {
 				properties[k] = v
 			}
-			return properties, schema.SchemaProps.Required, nil
+
+			return properties, schema.Required, nil
 		}
+
 		//for alias type of non-struct types ,such as array,map, etc. ignore field tag.
-		return map[string]spec.Schema{typeName: *schema}, nil, nil
+		return map[string]*openapi3.SchemaRef{}, nil, nil
 	}
 
 	fieldName, schema, err := parser.getFieldName(field)
@@ -944,10 +947,10 @@ func (parser *Parser) parseStructField(file *ast.File, field *ast.Field) (map[st
 	schema.Extensions = structField.extensions
 	eleSchema := schema
 	if structField.schemaType == "array" {
-		eleSchema = schema.Items.Schema
+		eleSchema = schema.Items.Value
 	}
-	eleSchema.Maximum = structField.maximum
-	eleSchema.Minimum = structField.minimum
+	eleSchema.Max = structField.maximum
+	eleSchema.Min = structField.minimum
 	eleSchema.MaxLength = structField.maxLength
 	eleSchema.MinLength = structField.minLength
 	eleSchema.Enum = structField.enums
@@ -956,7 +959,7 @@ func (parser *Parser) parseStructField(file *ast.File, field *ast.Field) (map[st
 	if structField.isRequired {
 		tagRequired = append(tagRequired, fieldName)
 	}
-	return map[string]spec.Schema{fieldName: *schema}, tagRequired, nil
+	return map[string]openapi3.Schema{fieldName: *schema}, tagRequired, nil
 }
 
 func getFieldType(field ast.Expr) (string, error) {
@@ -980,7 +983,7 @@ func getFieldType(field ast.Expr) (string, error) {
 	return "", fmt.Errorf("unknown field type %#v", field)
 }
 
-func (parser *Parser) getFieldName(field *ast.Field) (name string, schema *spec.Schema, err error) {
+func (parser *Parser) getFieldName(field *ast.Field) (name string, schema *openapi3.Schema, err error) {
 	// Skip non-exported fields.
 	if !ast.IsExported(field.Names[0].Name) {
 		return "", nil, nil
@@ -1137,7 +1140,7 @@ func (parser *Parser) parseFieldTag(field *ast.Field, types []string) (*structFi
 		if err != nil {
 			return nil, err
 		}
-		structField.minLength = minLength
+		structField.minLength = *minLength
 	}
 	if readOnly := structTag.Get("readonly"); readOnly != "" {
 		structField.readOnly = readOnly == "true"
@@ -1171,36 +1174,36 @@ func (parser *Parser) parseFieldTag(field *ast.Field, types []string) (*structFi
 }
 
 // GetSchemaTypePath get path of schema type
-func (parser *Parser) GetSchemaTypePath(schema *spec.Schema, depth int) []string {
+func (parser *Parser) GetSchemaTypePath(schema *openapi3.SchemaRef, depth int) []string {
 	if schema == nil || depth == 0 {
 		return nil
 	}
-	if name := schema.Ref.String(); name != "" {
+	if name := schema.Value.Type; name != "" {
 		if pos := strings.LastIndexByte(name, '/'); pos >= 0 {
 			name = name[pos+1:]
-			if schema, ok := parser.swagger.Definitions[name]; ok {
-				return parser.GetSchemaTypePath(&schema, depth)
+			if schema, ok := parser.swagger.Components.Schemas[name]; ok {
+				return parser.GetSchemaTypePath(schema, depth)
 			}
 		}
-	} else if len(schema.Type) > 0 {
-		if schema.Type[0] == "array" {
+	} else if len(schema.Value.Type) > 0 {
+		if schema.Value.Type == "array" {
 			depth--
-			s := []string{schema.Type[0]}
-			return append(s, parser.GetSchemaTypePath(schema.Items.Schema, depth)...)
-		} else if schema.Type[0] == OBJECT {
-			if schema.AdditionalProperties != nil && schema.AdditionalProperties.Schema != nil {
+			s := []string{schema.Value.Type}
+			return append(s, parser.GetSchemaTypePath(schema.Value.Items, depth)...)
+		} else if schema.Value.Type == OBJECT {
+			if schema.Value.AdditionalProperties != nil && schema.Value.AdditionalProperties.Value != nil {
 				// for map
 				depth--
-				s := []string{schema.Type[0]}
-				return append(s, parser.GetSchemaTypePath(schema.AdditionalProperties.Schema, depth)...)
+				s := []string{schema.Value.Type}
+				return append(s, parser.GetSchemaTypePath(schema.Value.AdditionalProperties, depth)...)
 			}
 		}
-		return []string{schema.Type[0]}
+		return []string{schema.Value.Type}
 	}
 	return nil
 }
 
-func replaceLastTag(slice []spec.Tag, element spec.Tag) {
+func replaceLastTag(slice []*openapi3.Tag, element *openapi3.Tag) {
 	slice = slice[:len(slice)-1]
 	slice = append(slice, element)
 }
@@ -1219,13 +1222,13 @@ func getFloatTag(structTag reflect.StructTag, tagName string) (*float64, error) 
 	return &value, nil
 }
 
-func getIntTag(structTag reflect.StructTag, tagName string) (*int64, error) {
+func getIntTag(structTag reflect.StructTag, tagName string) (*uint64, error) {
 	strValue := structTag.Get(tagName)
 	if strValue == "" {
 		return nil, nil
 	}
 
-	value, err := strconv.ParseInt(strValue, 10, 64)
+	value, err := strconv.ParseUint(strValue, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("can't parse numeric value of %q tag: %v", tagName, err)
 	}
@@ -1407,31 +1410,31 @@ func (parser *Parser) checkOperationIDUniqueness() error {
 		operationsIds[operationID] = currentPath
 		return nil
 	}
-	getOperationID := func(itm spec.PathItem) (string, string) {
+	getOperationID := func(itm *openapi3.PathItem) (string, string) {
 		if itm.Get != nil {
-			return "GET", itm.Get.ID
+			return "GET", itm.Get.OperationID
 		}
 		if itm.Put != nil {
-			return "PUT", itm.Put.ID
+			return "PUT", itm.Put.OperationID
 		}
 		if itm.Post != nil {
-			return "POST", itm.Post.ID
+			return "POST", itm.Post.OperationID
 		}
 		if itm.Delete != nil {
-			return "DELETE", itm.Delete.ID
+			return "DELETE", itm.Delete.OperationID
 		}
 		if itm.Options != nil {
-			return "OPTIONS", itm.Options.ID
+			return "OPTIONS", itm.Options.OperationID
 		}
 		if itm.Head != nil {
-			return "HEAD", itm.Head.ID
+			return "HEAD", itm.Head.OperationID
 		}
 		if itm.Patch != nil {
-			return "PATCH", itm.Patch.ID
+			return "PATCH", itm.Patch.OperationID
 		}
 		return "", ""
 	}
-	for path, itm := range parser.swagger.Paths.Paths {
+	for path, itm := range parser.swagger.Paths {
 		method, id := getOperationID(itm)
 		if err := saveOperationID(id, fmt.Sprintf("%s %s", method, path)); err != nil {
 			return err
@@ -1459,8 +1462,8 @@ func (parser *Parser) Skip(path string, f os.FileInfo) error {
 	return nil
 }
 
-// GetSwagger returns *spec.Swagger which is the root document object for the API specification.
-func (parser *Parser) GetSwagger() *spec.Swagger {
+// GetSwagger returns *openapi3.Swagger which is the root document object for the API specification.
+func (parser *Parser) GetSwagger() *openapi3.Swagger {
 	return parser.swagger
 }
 
@@ -1475,8 +1478,8 @@ func (parser *Parser) addTestType(typename string) {
 	typeDef := &TypeSpecDef{}
 	parser.packages.uniqueDefinitions[typename] = typeDef
 	parser.parsedSchemas[typeDef] = &Schema{
-		PkgPath: "",
-		Name:    typename,
-		Schema:  PrimitiveSchema(OBJECT),
+		PkgPath:   "",
+		Name:      typename,
+		SchemaRef: PrimitiveSchema(OBJECT),
 	}
 }

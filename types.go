@@ -1,15 +1,16 @@
 package swag
 
 import (
-	"github.com/go-openapi/spec"
 	"go/ast"
+
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 //Schema parsed schema
 type Schema struct {
-	PkgPath      string //package import path used to rename Name of a definition int case of conflict
-	Name         string //Name in definitions
-	*spec.Schema        //
+	PkgPath string //package import path used to rename Name of a definition int case of conflict
+	Name    string //Name in definitions
+	*openapi3.SchemaRef
 }
 
 //TypeSpecDef the whole information of a typeSpec

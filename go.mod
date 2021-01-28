@@ -3,6 +3,7 @@ module github.com/Nerzal/swag
 require (
 	github.com/KyleBanks/depth v1.2.1
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
+	github.com/getkin/kin-openapi v0.35.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-openapi/spec v0.20.0
 	github.com/stretchr/testify v1.7.0

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-openapi/spec"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -282,11 +282,8 @@ func TestGen_writeGoDoc(t *testing.T) {
 	assert.Error(t, err)
 
 	packageTemplate = `{{.Data}}`
-	swagger := &spec.Swagger{
-		VendorExtensible: spec.VendorExtensible{},
-		SwaggerProps: spec.SwaggerProps{
-			Info: &spec.Info{},
-		},
+	swagger := &openapi3.Swagger{
+		Info: &openapi3.Info{},
 	}
 	err = gen.writeGoDoc("docs", &mockWriter{}, swagger, &Config{})
 	assert.Error(t, err)

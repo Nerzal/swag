@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/Nerzal/swag"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/ghodss/yaml"
-	"github.com/go-openapi/spec"
 )
 
 // Gen presents a generate tool for swag.
@@ -164,7 +164,7 @@ func (g *Gen) formatSource(src []byte) []byte {
 	return code
 }
 
-func (g *Gen) writeGoDoc(packageName string, output io.Writer, swagger *spec.Swagger, config *Config) error {
+func (g *Gen) writeGoDoc(packageName string, output io.Writer, swagger *openapi3.Swagger, config *Config) error {
 	generator, err := template.New("swagger_info").Funcs(template.FuncMap{
 		"printDoc": func(v string) string {
 			// Add schemes
@@ -177,35 +177,32 @@ func (g *Gen) writeGoDoc(packageName string, output io.Writer, swagger *spec.Swa
 		return err
 	}
 
-	swaggerSpec := &spec.Swagger{
-		VendorExtensible: swagger.VendorExtensible,
-		SwaggerProps: spec.SwaggerProps{
-			ID:       swagger.ID,
-			Consumes: swagger.Consumes,
-			Produces: swagger.Produces,
-			Swagger:  swagger.Swagger,
-			Info: &spec.Info{
-				VendorExtensible: swagger.Info.VendorExtensible,
-				InfoProps: spec.InfoProps{
-					Description:    "{{.Description}}",
-					Title:          "{{.Title}}",
-					TermsOfService: swagger.Info.TermsOfService,
-					Contact:        swagger.Info.Contact,
-					License:        swagger.Info.License,
-					Version:        "{{.Version}}",
-				},
-			},
-			Host:                "{{.Host}}",
-			BasePath:            "{{.BasePath}}",
-			Paths:               swagger.Paths,
-			Definitions:         swagger.Definitions,
-			Parameters:          swagger.Parameters,
-			Responses:           swagger.Responses,
-			SecurityDefinitions: swagger.SecurityDefinitions,
-			Security:            swagger.Security,
-			Tags:                swagger.Tags,
-			ExternalDocs:        swagger.ExternalDocs,
-		},
+	swaggerSpec := &openapi3.Swagger{
+		// VendorExtensible: swagger.VendorExtensible,
+		// SwaggerProps: openapi3.Swagger{
+		// ID:       swagger.ID,
+		// Consumes: swagger.Consumes,
+		// Produces: swagger.Produces,
+		// Swagger:  swagger.Swagger,
+		// Info: &openapi3.Info{
+		// VendorExtensible: swagger.Info.VendorExtensible,
+		// Description:    "{{.Description}}",
+		// Title:          "{{.Title}}",
+		// TermsOfService: swagger.Info.TermsOfService,
+		// Contact:        swagger.Info.Contact,
+		// License:        swagger.Info.License,
+		// Version:        "{{.Version}}",
+		// },
+		// Host:                "{{.Host}}",
+		// BasePath:            "{{.BasePath}}",
+		// Paths:               swagger.Paths,
+		// Definitions:         swagger.Definitions,
+		// Parameters:          swagger.Parameters,
+		// Responses:           swagger.Responses,
+		// SecurityDefinitions: swagger.SecurityDefinitions,
+		Security:     swagger.Security,
+		Tags:         swagger.Tags,
+		ExternalDocs: swagger.ExternalDocs,
 	}
 
 	// crafted docs.json
@@ -230,13 +227,13 @@ func (g *Gen) writeGoDoc(packageName string, output io.Writer, swagger *spec.Swa
 		Timestamp:     time.Now(),
 		GeneratedTime: config.GeneratedTime,
 		Doc:           string(buf),
-		Host:          swagger.Host,
-		PackageName:   packageName,
-		BasePath:      swagger.BasePath,
-		Schemes:       swagger.Schemes,
-		Title:         swagger.Info.Title,
-		Description:   swagger.Info.Description,
-		Version:       swagger.Info.Version,
+		// Host:          swagger.Host,
+		PackageName: packageName,
+		// BasePath:      swagger.BasePath,
+		// Schemes:       swagger.Schemes,
+		Title:       swagger.Info.Title,
+		Description: swagger.Info.Description,
+		Version:     swagger.Info.Version,
 	})
 	if err != nil {
 		return err

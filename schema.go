@@ -6,7 +6,7 @@ import (
 	"go/ast"
 	"strings"
 
-	"github.com/go-openapi/spec"
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 const (
@@ -139,17 +139,20 @@ func TypeDocName(pkgName string, spec *ast.TypeSpec) string {
 }
 
 //RefSchema build a reference schema
-func RefSchema(refType string) *spec.Schema {
-	return spec.RefSchema("#/definitions/" + refType)
+func RefSchema(refType string) *openapi3.SchemaRef {
+	panic("not yet implemented")
+	// result := openapi3.Schema{}
+	// return openapi3.RefSchema("#/definitions/" + refType)
 }
 
 //PrimitiveSchema build a primitive schema
-func PrimitiveSchema(refType string) *spec.Schema {
-	return &spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{refType}}}
+func PrimitiveSchema(refType string) *openapi3.SchemaRef {
+	panic("not yet implemented")
+	// return &openapi3.Schema{SchemaProps: openapi3.SchemaProps{Type: []string{refType}}}
 }
 
 // BuildCustomSchema build custom schema specified by tag swaggertype
-func BuildCustomSchema(types []string) (*spec.Schema, error) {
+func BuildCustomSchema(types []string) (*openapi3.Schema, error) {
 	if len(types) == 0 {
 		return nil, nil
 	}
@@ -168,7 +171,10 @@ func BuildCustomSchema(types []string) (*spec.Schema, error) {
 		if err != nil {
 			return nil, err
 		}
-		return spec.ArrayProperty(schema), nil
+
+		schema.Type = "array"
+		panic("not yet implemented")
+		// return spec.ArrayProperty(schema), nil
 	case OBJECT:
 		if len(types) == 1 {
 			return PrimitiveSchema(types[0]), nil
@@ -177,7 +183,9 @@ func BuildCustomSchema(types []string) (*spec.Schema, error) {
 		if err != nil {
 			return nil, err
 		}
-		return spec.MapProperty(schema), nil
+		schema.Type = "object"
+		panic("not yet implemented")
+		// return spec.MapProperty(schema), nil
 	default:
 		err := CheckSchemaType(types[0])
 		if err != nil {

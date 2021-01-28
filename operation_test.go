@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"testing"
 
-	"github.com/go-openapi/spec"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -630,7 +629,7 @@ func TestParseResponseCommentWithArrayType(t *testing.T) {
 	assert.NoError(t, err)
 	response := operation.Responses.StatusCodeResponses[200]
 	assert.Equal(t, `Error message, if code != 200`, response.Description)
-	assert.Equal(t, spec.StringOrArray{"array"}, response.Schema.Type)
+	assert.Equal(t, openapi3.StringOrArray{"array"}, response.Schema.Type)
 
 	b, _ := json.MarshalIndent(operation, "", "    ")
 
